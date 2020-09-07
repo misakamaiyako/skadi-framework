@@ -35,8 +35,11 @@
 * dateTimeFormat: default formatting for datetime objects, default by YYYY-MM-DD HH:mm:ss.
 * timeFormat: default formatting for time objects, default by HH:mm:ss.
 * XFrameOptions: to control if you allow you site display in frame, three value acceptable, "DENY", "SAMEORIGIN" or \`ALLOW-FROM https://example.com/\`
-* SecureProxySSLHeader: if your app is behind a proxy that sets a header to specify secure connections, and that proxy ensures that user-submitted headers with the same name are ignored (so that people can't spoof it), set this value to a tuple of (header_name, header_value). For any requests that come in with that header/value, request.is_secure() will return true. WARNING! Only set this if you fully understand what you're doing. Otherwise, you may be opening yourself up to a security risk.
+* SecureProxySSLHeader: if your app is behind a proxy with sets a header to specify secure connections, and that proxy ensures that user-submitted headers with the same name are ignored (so that people can't spoof it), set this value to a tuple of (header_name, header_value). For any requests that come in with that header/value, request.is_secure() will return true. WARNING! Only set this if you fully understand what you're doing. Otherwise, you may be opening yourself up to a security risk.
 * defaultHashingAlgorithm: default hashing algorithm, i.g. encoding cookies, password reset tokens, default by sha256.
+* tsl: whether to use tsl,default by false, if set true, you should provide privateKey and certificate.
+* privateKey: privateKey's absolute path
+* maxHeadersCount: how many header can one request content, set 0 with no limit.
 * sessionCacheName:  cache to store session data if using the cache session backend.
 * sessionCookieName: cookie's name, default by sessionId.
 * sessionCookieAge: duration of session or cookie, default by 1 week, unit in ms.
