@@ -36,8 +36,10 @@ class App {
 			console.log("server started on port " + port);
 			this.ready(this.server);
 		});
+		bridge = this;
 	}
 
 	ready(server: any) {}
 }
 export default App;
+export let bridge: App | {} = {};
