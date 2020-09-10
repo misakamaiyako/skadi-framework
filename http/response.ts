@@ -14,7 +14,19 @@ type OneCookie = {
 	samesite: "lax" | "none" | "strict";
 };
 type sameSite = "lax" | "none" | "strict" | null;
-export class HTTPResponse {
+type validCharset =
+	| "utf-8"
+	| "ascii"
+	| "utf8"
+	| "utf16le"
+	| "ucs2"
+	| "ucs-2"
+	| "base64"
+	| "latin1"
+	| "binary"
+	| "hex"
+	| undefined;
+export class HTTPResponseBase {
 	statusCode: number = 200;
 	#headers: { [key: string]: string[] };
 	#resourceClosers: any[];
@@ -22,9 +34,14 @@ export class HTTPResponse {
 	#cookie: { [key: string]: OneCookie };
 	private closed: boolean;
 	#reasonPhrase: string | undefined;
-	#charset: string;
+	#charset: validCharset;
 	private ContentType: string;
-	constructor(contentType: string | null = null, status: number = 200, reason: string = "", charset: string = "utf-8") {
+	constructor(
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
 		this.#headers = {};
 		this.#resourceClosers = [];
 		this.#handleClass = null;
@@ -58,19 +75,23 @@ export class HTTPResponse {
 	set reasonPhrase(value) {
 		this.#reasonPhrase = value;
 	}
-	get charset() {
+	get charset(): validCharset {
 		if (this.#charset) {
 			return this.#charset;
 		}
 		const contentType = this.getHeader("ContentType");
 		const matched = contentType.search(/;\s*charset=(?<charset>[^\s;]+)/);
 		if (matched > -1) {
-			return RegExp.$1;
+			return <
+				"utf-8" | "ascii" | "utf8" | "utf16le" | "ucs2" | "ucs-2" | "base64" | "latin1" | "binary" | "hex" | undefined
+			>RegExp.$1;
 		} else {
 			if (bridge instanceof App) {
-				return bridge.appConfig.charset;
+				return <
+					"utf-8" | "ascii" | "utf8" | "utf16le" | "ucs2" | "ucs-2" | "base64" | "latin1" | "binary" | "hex" | undefined
+				>bridge.appConfig.charset;
 			} else {
-				return "UTF-8";
+				return "utf-8";
 			}
 		}
 	}
@@ -216,8 +237,46 @@ export class HTTPResponse {
 		const secure = Boolean(/^(__Secure|__Host)/.test(key) || (sameSite && sameSite.toLocaleLowerCase() === "none"));
 		this.setCookie(key, "", 0, "Thu, 01 Jan 1970 00:00:00 GMT", path, domain, secure, false, sameSite);
 	}
+	makeByte(value: unknown): Buffer {
+		if (value instanceof Buffer) {
+			return Buffer.from(value);
+		}
+		if (typeof value === "string") {
+			return Buffer.from(value, this.charset);
+		}
+		// @ts-ignore
+		return Buffer.from(value.toString(), this.charset);
+	}
+	close() {
+		// this.
+	}
+	write() {
+		// @ts-ignore
+		throw new Error("This " + this.name + " instance instance is not writable");
+	}
+	flush() {}
+	tell() {
+		// @ts-ignore
+		throw new Error("This " + this.name + " instance cannot tell its position");
+	}
+	readable(): boolean {
+		return false;
+	}
+	seekable(): boolean {
+		return false;
+	}
+	writable(): boolean {
+		return false;
+	}
+	writelines() {
+		// @ts-ignore
+		throw new Error("This " + this.name + " instance is not writable");
+	}
 }
-class HttpResponseNotAllowed extends HTTPResponse {
+class HttpResponse extends HTTPResponseBase {
+	streaming: boolean = false;
+}
+class HttpResponseNotAllowed extends HTTPResponseBase {
 	statusCode = 405;
 	constructor() {
 		super();
