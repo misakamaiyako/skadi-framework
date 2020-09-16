@@ -1,4 +1,5 @@
 const moment = require("moment");
+const iri = require("iri");
 import crypto from "crypto";
 import App from "../app";
 import { bridge } from "../app/App";
@@ -29,7 +30,7 @@ type validCharset =
 export class HTTPResponseBase {
 	statusCode: number = 200;
 	#headers: { [key: string]: string[] };
-	#resourceClosers: any[];
+	resourceClosers: any[];
 	#handleClass: null | Function;
 	#cookie: { [key: string]: OneCookie };
 	private closed: boolean;
@@ -43,7 +44,7 @@ export class HTTPResponseBase {
 		charset: validCharset = "utf-8"
 	) {
 		this.#headers = {};
-		this.#resourceClosers = [];
+		this.resourceClosers = [];
 		this.#handleClass = null;
 		this.#cookie = {};
 		this.closed = false;
@@ -98,7 +99,7 @@ export class HTTPResponseBase {
 	set charset(value) {
 		this.#charset = value;
 	}
-	serializeHeaders() {
+	serializeHeaders(): Buffer {
 		const toBuffer = (value: any, encoding: BufferEncoding) => {
 			if (value instanceof Buffer) {
 				return value;
@@ -106,6 +107,12 @@ export class HTTPResponseBase {
 				return Buffer.from(value, encoding);
 			}
 		};
+		let headers: Buffer[] = [];
+		for (let header in Object.values(this.#headers)) {
+			const [key, value] = header;
+			headers.push(Buffer.concat([toBuffer(key, "ascii"), Buffer.from(":"), toBuffer(value, "latin1")]));
+		}
+		return Buffer.from(headers.join("\r\n"));
 	}
 	get contentTypeForRep() {
 		if (this.ContentType) {
@@ -250,7 +257,7 @@ export class HTTPResponseBase {
 	close() {
 		// this.
 	}
-	write() {
+	write(content: unknown) {
 		// @ts-ignore
 		throw new Error("This " + this.name + " instance instance is not writable");
 	}
@@ -268,13 +275,174 @@ export class HTTPResponseBase {
 	writable(): boolean {
 		return false;
 	}
-	writelines() {
+	writelines(lines: unknown[]) {
 		// @ts-ignore
 		throw new Error("This " + this.name + " instance is not writable");
 	}
 }
 class HttpResponse extends HTTPResponseBase {
 	streaming: boolean = false;
+	#container: Buffer[] = [];
+
+	constructor(
+		content: Buffer = Buffer.from(""),
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		super(contentType, status, reason, charset);
+		this.content = content;
+	}
+	serialize(): Buffer {
+		return Buffer.concat([this.serializeHeaders(), Buffer.from("\r\n\r\n"), this.content]);
+	}
+	get content() {
+		return Buffer.concat(this.#container);
+	}
+	set content(value: any) {
+		let content = Buffer.from("");
+		if (value[Symbol.iterator] || (typeof value !== "string" && !(value instanceof Buffer))) {
+			for (let i in value) {
+				content = Buffer.concat([content, Buffer.from(value)]);
+			}
+			if (value.close) {
+				try {
+					value.close();
+				} catch (e) {
+					///
+				}
+			}
+		} else {
+			content = this.makeByte(value);
+		}
+		this.#container = [content];
+	}
+	*[Symbol.iterator]() {
+		yield this.#container;
+	}
+	write(content: unknown) {
+		this.#container.push(this.makeByte(content));
+	}
+	tell() {
+		return this.content.length;
+	}
+	getValue() {
+		return this.content;
+	}
+	writable(): boolean {
+		return true;
+	}
+	writelines(lines: unknown[]) {
+		for (let line in lines) {
+			this.write(lines);
+		}
+	}
+}
+class StreamingHttpResponse extends HTTPResponseBase {
+	streaming: boolean = true;
+	// @ts-ignore
+	#iterator: () => Iterator<any>;
+	// private streamingContent: () => void;
+	constructor(
+		streamingContent: Iterable<any> = [],
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		super(contentType, status, reason, charset);
+		this.streamingContent = streamingContent;
+	}
+	get content() {
+		// @ts-ignore
+		throw new Error(`This ${this.name} instance has no 'content' attribute. Use 'streamingContent' instead.`);
+	}
+	get streamingContent(): Iterable<Buffer> {
+		let i = this.#iterator();
+		let chunk: Buffer[] = [];
+		while (i.next) {
+			// @ts-ignore
+			chunk.push(i.next());
+		}
+		return chunk;
+	}
+	set streamingContent(value: Iterable<Buffer>) {
+		this.setStreamingContent(value);
+	}
+	setStreamingContent(value: Iterable<Buffer> | JSON) {
+		if (typeof value === "object" && !Array.isArray(value)) {
+			this.#iterator = Object.values(value)[Symbol.iterator];
+		} else {
+			this.#iterator = value[Symbol.iterator];
+		}
+		if (value.hasOwnProperty("close")) {
+			// @ts-ignore
+			this.resourceClosers.push(value.close);
+		}
+	}
+	*[Symbol.iterator]() {
+		yield this.streamingContent;
+	}
+	getValue() {
+		// @ts-ignore
+		return Buffer.concat(this.streamingContent);
+	}
+}
+class FileResponse extends StreamingHttpResponse {
+	blockSize: number = 4096;
+	asAttachment: boolean;
+	filename: String;
+	private fileToStream: Iterable<Buffer> | JSON | null = null;
+
+	constructor(
+		asAttachment: boolean = false,
+		filename: String = "",
+		streamingContent: Iterable<any> = [],
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		super(streamingContent, contentType, status, reason, charset);
+		this.asAttachment = asAttachment;
+		this.filename = filename;
+	}
+	setStreamingContent(value: Iterable<Buffer> | JSON) {
+		if (!value.hasOwnProperty("read")) {
+			this.fileToStream = null;
+			return super.setStreamingContent(value);
+		}
+		let fileLike;
+		this.fileToStream = fileLike = value;
+		if (value.hasOwnProperty("close")) {
+			// @ts-ignore
+			this.resourceClosers.push(value.close);
+		}
+		// const value = file
+		// @ts-ignore
+		let iter = fileLike.read(this.blockSize);//todo: make this iterable
+		super.setStreamingContent(value);
+	}
+}
+class HttpResponseRedirectBase extends HTTPResponseBase {
+	allowSchemes = ["http", "https", "ftp"];
+	private location: string;
+
+	constructor(
+		redirectTo: unknown,
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		super(contentType, status, reason, charset);
+		const IRI = new iri.IrI(redirectTo);
+		this.location = IRI.toURIString();
+		if (IRI.scheme && !this.allowSchemes.includes(IRI.scheme)) {
+			throw new TypeError("Unsafe redirect to URL with protocol " + IRI.scheme);
+		}
+	}
 }
 class HttpResponseNotAllowed extends HTTPResponseBase {
 	statusCode = 405;
