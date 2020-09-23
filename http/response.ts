@@ -1,10 +1,14 @@
+import * as path from "path";
+
 const moment = require("moment");
 const iri = require("iri");
 import crypto from "crypto";
 import App from "../app";
 import { bridge } from "../app/App";
+import * as fs from "fs";
+import mime from "mime-types";
 
-type OneCookie = {
+type cookie = {
 	value: string;
 	expires: number | "";
 	"max-age": number;
@@ -12,7 +16,7 @@ type OneCookie = {
 	domain: null | string;
 	secure: boolean;
 	httponly: boolean;
-	samesite: "lax" | "none" | "strict";
+	sameSite: sameSite;
 };
 type sameSite = "lax" | "none" | "strict" | null;
 type validCharset =
@@ -27,16 +31,22 @@ type validCharset =
 	| "binary"
 	| "hex"
 	| undefined;
+type fileLike = {
+	name?: string;
+	getBuffer?: () => Buffer;
+};
+type json = {
+	[key in string | number]: any;
+};
 export class HTTPResponseBase {
 	statusCode: number = 200;
 	#headers: { [key: string]: string[] };
 	resourceClosers: any[];
 	#handleClass: null | Function;
-	#cookie: { [key: string]: OneCookie };
+	#cookie: { [key: string]: cookie };
 	private closed: boolean;
 	#reasonPhrase: string | undefined;
 	#charset: validCharset;
-	private ContentType: string;
 	constructor(
 		contentType: string | null = null,
 		status: number = 200,
@@ -61,9 +71,9 @@ export class HTTPResponseBase {
 		this.#reasonPhrase = reason;
 		this.#charset = charset;
 		if (!contentType) {
-			this.ContentType = "text/html; charset=" + charset;
+			this.addHeader("Content-Type", "text/html; charset=" + charset);
 		} else {
-			this.ContentType = contentType;
+			this.addHeader("Content-Type", contentType);
 		}
 	}
 	get reasonPhrase() {
@@ -80,7 +90,7 @@ export class HTTPResponseBase {
 		if (this.#charset) {
 			return this.#charset;
 		}
-		const contentType = this.getHeader("ContentType");
+		const contentType: string = this.getHeader("ContentType");
 		const matched = contentType.search(/;\s*charset=(?<charset>[^\s;]+)/);
 		if (matched > -1) {
 			return <
@@ -115,8 +125,8 @@ export class HTTPResponseBase {
 		return Buffer.from(headers.join("\r\n"));
 	}
 	get contentTypeForRep() {
-		if (this.ContentType) {
-			return `,"${this.ContentType}"`;
+		if (this.getHeader("Content-Type")) {
+			return `,"${this.getHeader("Content-Type")}"`;
 		} else {
 			return "";
 		}
@@ -159,14 +169,18 @@ export class HTTPResponseBase {
 			throw new ReferenceError("no such a header named" + header);
 		}
 	}
-	getHeader(header: string) {
+	getHeader = <T>(header: string, defaultValue?: T): string | T => {
 		try {
 			return this.#headers[header.toString()][1];
 		} catch (e) {
-			console.error(e);
-			throw new ReferenceError("no such a header named" + header);
+			if (defaultValue) {
+				return defaultValue;
+			} else {
+				console.error(e);
+				throw new ReferenceError("no such a header named" + header);
+			}
 		}
-	}
+	};
 	items(): string[][] {
 		return Object.entries(this.#headers).map((t) => t[1]);
 	}
@@ -222,9 +236,9 @@ export class HTTPResponseBase {
 		this.#cookie[key].httponly = httpOnly;
 		if (sameSite) {
 			if (["lax", "none", "strict"].includes(sameSite.toLowerCase())) {
-				this.#cookie[key].samesite = sameSite;
+				this.#cookie[key].sameSite = sameSite;
 			} else {
-				throw new ReferenceError('samesite must be "lax", "none", or "strict".');
+				throw new TypeError('sameSite must be "lax", "none", or "strict".');
 			}
 		}
 	}
@@ -258,13 +272,11 @@ export class HTTPResponseBase {
 		// this.
 	}
 	write(content: unknown) {
-		// @ts-ignore
-		throw new Error("This " + this.name + " instance instance is not writable");
+		throw new Error("This " + this.constructor.name + " instance instance is not writable");
 	}
 	flush() {}
 	tell() {
-		// @ts-ignore
-		throw new Error("This " + this.name + " instance cannot tell its position");
+		throw new Error("This " + this.constructor.name + " instance cannot tell its position");
 	}
 	readable(): boolean {
 		return false;
@@ -276,13 +288,12 @@ export class HTTPResponseBase {
 		return false;
 	}
 	writelines(lines: unknown[]) {
-		// @ts-ignore
-		throw new Error("This " + this.name + " instance is not writable");
+		throw new Error("This " + this.constructor.name + " instance is not writable");
 	}
 }
 class HttpResponse extends HTTPResponseBase {
 	streaming: boolean = false;
-	#container: Buffer[] = [];
+	container: Buffer[] = [];
 
 	constructor(
 		content: Buffer = Buffer.from(""),
@@ -298,7 +309,7 @@ class HttpResponse extends HTTPResponseBase {
 		return Buffer.concat([this.serializeHeaders(), Buffer.from("\r\n\r\n"), this.content]);
 	}
 	get content() {
-		return Buffer.concat(this.#container);
+		return Buffer.concat(this.container);
 	}
 	set content(value: any) {
 		let content = Buffer.from("");
@@ -316,13 +327,13 @@ class HttpResponse extends HTTPResponseBase {
 		} else {
 			content = this.makeByte(value);
 		}
-		this.#container = [content];
+		this.container = [content];
 	}
 	*[Symbol.iterator]() {
-		yield this.#container;
+		yield this.container;
 	}
 	write(content: unknown) {
-		this.#container.push(this.makeByte(content));
+		this.container.push(this.makeByte(content));
 	}
 	tell() {
 		return this.content.length;
@@ -355,8 +366,9 @@ class StreamingHttpResponse extends HTTPResponseBase {
 		this.streamingContent = streamingContent;
 	}
 	get content() {
-		// @ts-ignore
-		throw new Error(`This ${this.name} instance has no 'content' attribute. Use 'streamingContent' instead.`);
+		throw new Error(
+			`This ${this.constructor.name} instance has no 'content' attribute. Use 'streamingContent' instead.`
+		);
 	}
 	get streamingContent(): Iterable<Buffer> {
 		let i = this.#iterator();
@@ -392,12 +404,12 @@ class StreamingHttpResponse extends HTTPResponseBase {
 class FileResponse extends StreamingHttpResponse {
 	blockSize: number = 4096;
 	asAttachment: boolean;
-	filename: String;
+	filename: string;
 	private fileToStream: Iterable<Buffer> | JSON | null = null;
 
 	constructor(
 		asAttachment: boolean = false,
-		filename: String = "",
+		filename: string = "",
 		streamingContent: Iterable<any> = [],
 		contentType: string | null = null,
 		status: number = 200,
@@ -413,16 +425,66 @@ class FileResponse extends StreamingHttpResponse {
 			this.fileToStream = null;
 			return super.setStreamingContent(value);
 		}
-		let fileLike;
+		let fileLike: fileLike;
+		// @ts-ignore
 		this.fileToStream = fileLike = value;
 		if (value.hasOwnProperty("close")) {
 			// @ts-ignore
 			this.resourceClosers.push(value.close);
 		}
-		// const value = file
 		// @ts-ignore
-		let iter = fileLike.read(this.blockSize);//todo: make this iterable
+		let iter = fileLike.read(this.blockSize);
+		this.setHeaders(fileLike);
 		super.setStreamingContent(value);
+	}
+	setHeaders(fileLike: fileLike) {
+		const encodingMap = {
+			bzip2: "application/x-bzip",
+			gzip: "application/gzip",
+			xz: "application/x-xz",
+		};
+		let fileName = fileLike.name;
+		if (!(typeof fileName === "string" && fileName)) {
+			fileName = this.filename;
+		}
+		if (path.isAbsolute(fileName)) {
+			fs.stat(fileName, (err, stats) => {
+				if (err) {
+					console.error(err);
+				} else {
+					this.addHeader("Content-Length", stats.size.toString());
+				}
+			});
+		} else {
+			if (fileLike.getBuffer) {
+				this.addHeader("Content-Length", fileLike.getBuffer().length.toString());
+			}
+		}
+		if (this.getHeader("Content-Type", "").startsWith("text/html")) {
+			if (fileName) {
+				const contentType = mime.contentType(fileName);
+				if (contentType) {
+					this.addHeader("contentType", contentType);
+				} else {
+					this.addHeader("contentType", "application/octet-stream");
+				}
+			} else {
+				this.addHeader("contentType", "application/octet-stream");
+			}
+		}
+		fileName = this.filename ?? path.basename(fileName);
+		if (fileName) {
+			let disposition = this.asAttachment ? "attachment" : "inline";
+			let fileExpr: string;
+			if (encodeURI(fileName) === fileName) {
+				fileExpr = "filename=" + fileName;
+			} else {
+				fileExpr = "filename*=utf-8 " + encodeURI(fileName);
+			}
+			this.addHeader("Content-Disposition", disposition + ";" + fileExpr);
+		} else if (this.asAttachment) {
+			this.addHeader("Content-Disposition", "attachment");
+		}
 	}
 }
 class HttpResponseRedirectBase extends HTTPResponseBase {
@@ -443,10 +505,78 @@ class HttpResponseRedirectBase extends HTTPResponseBase {
 			throw new TypeError("Unsafe redirect to URL with protocol " + IRI.scheme);
 		}
 	}
+	get url() {
+		return this.getHeader("Location");
+	}
+}
+class HttpResponseRedirect extends HttpResponseRedirectBase {
+	statusCode = 302;
+}
+class HttpResponsePermanentRedirect extends HttpResponseRedirectBase {
+	statusCode = 301;
+}
+class HttpResponseNotModified extends HttpResponse {
+	statusCode = 304;
+	constructor(
+		content: Buffer = Buffer.from(""),
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		super(content, contentType, status, reason, charset);
+		this.deleteHeader("content-type");
+	}
+
+	set content(value: string | any[] | Buffer | Uint8Array) {
+		if (value) {
+			throw ReferenceError("You cannot set content to a 304 (Not Modified) response");
+		}
+		super.container = [];
+	}
+}
+class HttpResponseBadRequest extends HttpResponse {
+	statusCode = 400;
+}
+class HttpResponseForbidden extends HttpResponse {
+	statusCode = 403;
+}
+class HttpResponseNotFound extends HttpResponse {
+	statusCode = 404;
 }
 class HttpResponseNotAllowed extends HTTPResponseBase {
 	statusCode = 405;
-	constructor() {
-		super();
+	constructor(
+		permittedMethods: string[],
+		contentType: string | null = null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		super(contentType, status, reason, charset);
+		this.addHeader("Allow", permittedMethods.join());
+	}
+}
+class HttpResponseGone extends HttpResponse {
+	statusCode = 410;
+}
+class Http404 extends HttpResponse {
+	statusCode = 404;
+}
+class HttpResponseServerError extends HttpResponse {
+	statusCode = 500;
+}
+class JsonResponse extends HttpResponse {
+	constructor(
+		data: json,
+		content: Buffer,
+		contentType: string | null,
+		status: number = 200,
+		reason: string = "",
+		charset: validCharset = "utf-8"
+	) {
+		contentType = "application/json";
+		content = Buffer.from(data);
+		super(content, contentType, status, reason, charset);
 	}
 }
