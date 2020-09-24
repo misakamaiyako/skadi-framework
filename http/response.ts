@@ -291,7 +291,7 @@ export class HTTPResponseBase {
 		throw new Error("This " + this.constructor.name + " instance is not writable");
 	}
 }
-class HttpResponse extends HTTPResponseBase {
+export class HttpResponse extends HTTPResponseBase {
 	streaming: boolean = false;
 	container: Buffer[] = [];
 
@@ -350,7 +350,7 @@ class HttpResponse extends HTTPResponseBase {
 		}
 	}
 }
-class StreamingHttpResponse extends HTTPResponseBase {
+export class StreamingHttpResponse extends HTTPResponseBase {
 	streaming: boolean = true;
 	// @ts-ignore
 	#iterator: () => Iterator<any>;
@@ -401,7 +401,7 @@ class StreamingHttpResponse extends HTTPResponseBase {
 		return Buffer.concat(this.streamingContent);
 	}
 }
-class FileResponse extends StreamingHttpResponse {
+export class FileResponse extends StreamingHttpResponse {
 	blockSize: number = 4096;
 	asAttachment: boolean;
 	filename: string;
@@ -487,7 +487,7 @@ class FileResponse extends StreamingHttpResponse {
 		}
 	}
 }
-class HttpResponseRedirectBase extends HTTPResponseBase {
+export class HttpResponseRedirectBase extends HTTPResponseBase {
 	allowSchemes = ["http", "https", "ftp"];
 	private location: string;
 
@@ -509,13 +509,13 @@ class HttpResponseRedirectBase extends HTTPResponseBase {
 		return this.getHeader("Location");
 	}
 }
-class HttpResponseRedirect extends HttpResponseRedirectBase {
+export class HttpResponseRedirect extends HttpResponseRedirectBase {
 	statusCode = 302;
 }
-class HttpResponsePermanentRedirect extends HttpResponseRedirectBase {
+export class HttpResponsePermanentRedirect extends HttpResponseRedirectBase {
 	statusCode = 301;
 }
-class HttpResponseNotModified extends HttpResponse {
+export class HttpResponseNotModified extends HttpResponse {
 	statusCode = 304;
 	constructor(
 		content: Buffer = Buffer.from(""),
@@ -535,16 +535,16 @@ class HttpResponseNotModified extends HttpResponse {
 		super.container = [];
 	}
 }
-class HttpResponseBadRequest extends HttpResponse {
+export class HttpResponseBadRequest extends HttpResponse {
 	statusCode = 400;
 }
-class HttpResponseForbidden extends HttpResponse {
+export class HttpResponseForbidden extends HttpResponse {
 	statusCode = 403;
 }
-class HttpResponseNotFound extends HttpResponse {
+export class HttpResponseNotFound extends HttpResponse {
 	statusCode = 404;
 }
-class HttpResponseNotAllowed extends HTTPResponseBase {
+export class HttpResponseNotAllowed extends HTTPResponseBase {
 	statusCode = 405;
 	constructor(
 		permittedMethods: string[],
@@ -557,16 +557,16 @@ class HttpResponseNotAllowed extends HTTPResponseBase {
 		this.addHeader("Allow", permittedMethods.join());
 	}
 }
-class HttpResponseGone extends HttpResponse {
+export class HttpResponseGone extends HttpResponse {
 	statusCode = 410;
 }
-class Http404 extends HttpResponse {
+export class Http404 extends HttpResponse {
 	statusCode = 404;
 }
-class HttpResponseServerError extends HttpResponse {
+export class HttpResponseServerError extends HttpResponse {
 	statusCode = 500;
 }
-class JsonResponse extends HttpResponse {
+export class JsonResponse extends HttpResponse {
 	constructor(
 		data: json,
 		content: Buffer,
