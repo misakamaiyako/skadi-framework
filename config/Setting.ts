@@ -1,5 +1,7 @@
 import os from "os";
 import { ServerOptions } from "https";
+import TypedArray = NodeJS.TypedArray;
+import { BinaryLike, KeyObject } from "crypto";
 
 class databaseSetting {}
 
@@ -28,7 +30,7 @@ export default class Setting {
 	readonly trailingSlashes: boolean = true;
 	readonly blackList: string[] = [];
 	readonly ignore404List: string[] = [];
-	readonly secretKey: string = "";
+	readonly secretKey: string | Buffer | TypedArray | DataView | KeyObject = "";
 	readonly mediaRoot: string = "";
 	readonly mediaUrl: string = "";
 	readonly staticRoot: string = "";
@@ -43,8 +45,11 @@ export default class Setting {
 	readonly dateTimeFormat: string = "YYYY-MM-DD HH:mm:ss";
 	readonly timeFormat: string = "HH:mm:ss";
 	readonly XFrameOptions: "DENY" | "SAMEORIGIN" | string = "DENY";
+	readonly useXForwardedHost: boolean = false;
+	readonly useXForwardedPort: boolean = false;
 	readonly SecureProxySSLHeader: { [key: string]: any } = {};
 	readonly defaultHashingAlgorithm: string = "sha256";
+	readonly AlgorithmIV: BinaryLike | null = null;
 	readonly tsl: boolean = false;
 	readonly privateKey: string = "";
 	readonly restSetting: Omit<ServerOptions, "tsl" & "privateKey"> = {};
