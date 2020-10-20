@@ -3,7 +3,8 @@ import App, { bridge } from "../app/App";
 import * as querystring from "querystring";
 import { ParsedUrlQuery } from "querystring";
 import { cachedProperty } from "../views/decorators";
-import { getCookieSign } from "../core/signing";
+import { Error } from "tslint/lib/error";
+import * as stream from "stream";
 
 const iri = require("iri");
 const hostValidation = /^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9.:]+])(:\d+)?$/;
@@ -22,6 +23,8 @@ export class HttpRequest {
 	private resolverMatch: null;
 	private contentType: string | null;
 	private contentParams: null | { [key: string]: string };
+	#body: any;
+	#stream: any;
 	constructor() {
 		this.GET = querystring.parse("");
 		this.POST = querystring.parse("");
@@ -123,7 +126,7 @@ export class HttpRequest {
 			})()
 		);
 	}
-	getSignedCookie(key: string, fallback: string | {} = throwError, salt: string = "", maxAge = null): string {
+	getSignedCookie(key: string, fallback: string | {} = throwError): string {
 		let cookieValue = this.COOKIES[key];
 		if (!cookieValue) {
 			if (fallback !== throwError) {
@@ -133,7 +136,7 @@ export class HttpRequest {
 			}
 		}
 		try {
-			return getCookieSign(key + salt).unsign(cookieValue, maxAge);
+			return (<App>bridge).appConfig.cookieEncryption.decrypt(cookieValue);
 		} catch (e) {
 			if (fallback !== throwError) {
 				return <string>fallback;
@@ -153,6 +156,113 @@ export class HttpRequest {
 		}
 		const bits = urlSplit(location);
 		if (!(bits.scheme && bits.netloc)) {
+		}
+	}
+	@cachedProperty
+	get _currentSchemeHost(): string {
+		return this.scheme + "://" + this.getHost();
+	}
+	_getScheme() {
+		return "http";
+	}
+	get scheme() {
+		let SecureProxySSLHeader = (<App>bridge).appConfig.SecureProxySSLHeader;
+		if (SecureProxySSLHeader) {
+			let header: string, secure_value;
+			try {
+				header = SecureProxySSLHeader.header;
+				secure_value = SecureProxySSLHeader.secure_value;
+			} catch (e) {
+				throw new Error("SecureProxySSLHeader setting must be a object containing header and secure_value.");
+			}
+			let headerValue = this.META[header];
+			if (headerValue !== null) {
+				return headerValue === secure_value ? "https" : "http";
+			}
+		} else {
+			return this._getScheme();
+		}
+	}
+	isSecure(): boolean {
+		return this.scheme === "https";
+	}
+	get encoding() {
+		return this.#encoding;
+	}
+	set encoding(value) {
+		this.#encoding = value;
+		if (this.GET) {
+			this.GET = querystring.parse("");
+		}
+		if (this.POST) {
+			this.POST = querystring.parse("");
+		}
+	}
+	initializeHandlers() {
+		this.#uploadHandlers = (<App>bridge).appConfig.fileUploadHandlers.map((t) => uploadhandler.load_handler(t, this));
+	}
+	get uploadHandlers() {
+		if (this.#uploadHandlers.length === 0) {
+			this.initializeHandlers();
+		}
+		return this.#uploadHandlers;
+	}
+	set uploadHandlers(uploader) {
+		if (this.FILES) {
+			throw new TypeError("You cannot set the upload handlers after the upload has been processed.");
+		}
+		this.#uploadHandlers = uploader;
+	}
+	parseFileUpload(META, postData) {
+		this.uploadHandlers = Object.seal(this.uploadHandlers);
+		// todo: return post and file
+	}
+	get body() {
+		if (!this.#body) {
+			if (this.#readStarted) {
+				throw new Error("You cannot access body after reading from request's data stream");
+			}
+			if (
+				(<App>bridge).appConfig.dataUploadMaxMemorySize &&
+				parseInt(this.META.CONTENT_LENGTH ?? 0) > (<App>bridge).appConfig.dataUploadMaxMemorySize
+			) {
+				throw new Error("Request body exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE.");
+			}
+			try {
+				this.#body = this.read();
+			} catch (e) {
+				throw new Error("post is not readable");
+			}
+			this.#stream = new stream.Readable(this.#body);
+		}
+	}
+	markPostParseError() {
+		this.POST = querystring.parse("");
+		this.FILES = [];
+	}
+	loadPostAndFiles() {
+		if (this.method !== "POST") {
+			this.POST = querystring.parse("");
+			this.FILES = [];
+		}
+		if (this.#readStarted && !this.#body) {
+			this.markPostParseError();
+			return;
+		}
+		if (this.contentType === "multipart/form-data") {
+			let data;
+			if (this.#body) {
+				data = new stream.Readable(this.#body);
+			} else {
+				data = this;
+			}
+			try {
+				[this.POST, this.FILES] = this.parseFileUpload(this.META, data);
+			} catch (e) {
+				this.markPostParseError();
+				throw new Error();
+			}
+		} else if (this.contentType === "application/x-www-form-urlencoded") {
 		}
 	}
 }

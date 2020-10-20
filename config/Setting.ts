@@ -1,7 +1,7 @@
 import os from "os";
 import { ServerOptions } from "https";
-import TypedArray = NodeJS.TypedArray;
-import { BinaryLike, KeyObject } from "crypto";
+import crypto from "crypto";
+import { BinaryLike } from "crypto";
 
 class databaseSetting {}
 
@@ -30,7 +30,53 @@ export default class Setting {
 	readonly trailingSlashes: boolean = true;
 	readonly blackList: string[] = [];
 	readonly ignore404List: string[] = [];
-	readonly secretKey: string | Buffer | TypedArray | DataView | KeyObject = "";
+	readonly secretKey = "";
+	readonly defaultHashingAlgorithm: string = "sha256";
+	readonly AlgorithmIV: BinaryLike | null = null;
+	readonly encryption = ((cls) => {
+		return new (class {
+			readonly secretKey = cls.secretKey;
+			readonly AlgorithmIV = cls.AlgorithmIV;
+			readonly defaultHashingAlgorithm = cls.defaultHashingAlgorithm;
+			encrypt(data: crypto.BinaryLike): string {
+				return crypto
+					.createCipheriv(this.defaultHashingAlgorithm, this.secretKey, this.AlgorithmIV)
+					.update(data)
+					.toString("utf-8");
+			}
+			decrypt(data: string): string {
+				return crypto.createDecipheriv(new Buffer(data, "utf-8").toString("binary"), "binary", "utf8").final("utf-8");
+			}
+		})();
+	})(this);
+	readonly encryptCookie: boolean = true;
+	readonly cookieSecretKey = "cookie";
+	readonly cookieDefaultHashingAlgorithm: string = "sha256";
+	readonly cookieAlgorithmIV: BinaryLike | null = null;
+	readonly cookieEncryption = ((cls) => {
+		return new (class {
+			readonly secretKey = cls.cookieSecretKey;
+			readonly AlgorithmIV = cls.cookieAlgorithmIV;
+			readonly defaultHashingAlgorithm = cls.cookieDefaultHashingAlgorithm;
+			encrypt(data: crypto.BinaryLike): string {
+				if (cls.encryptCookie) {
+					return crypto
+						.createCipheriv(this.defaultHashingAlgorithm, this.secretKey, this.AlgorithmIV)
+						.update(data)
+						.toString("utf-8");
+				} else {
+					return data.toString();
+				}
+			}
+			decrypt(data: string): string {
+				if (cls.encryptCookie) {
+					return crypto.createDecipheriv(new Buffer(data, "utf-8").toString("binary"), "binary", "utf8").final("utf-8");
+				} else {
+					return data;
+				}
+			}
+		})();
+	})(this);
 	readonly mediaRoot: string = "";
 	readonly mediaUrl: string = "";
 	readonly staticRoot: string = "";
@@ -47,14 +93,13 @@ export default class Setting {
 	readonly XFrameOptions: "DENY" | "SAMEORIGIN" | string = "DENY";
 	readonly useXForwardedHost: boolean = false;
 	readonly useXForwardedPort: boolean = false;
-	readonly SecureProxySSLHeader: { [key: string]: any } = {};
-	readonly defaultHashingAlgorithm: string = "sha256";
-	readonly AlgorithmIV: BinaryLike | null = null;
+	readonly SecureProxySSLHeader: { [key: string]: any } | null = null;
 	readonly tsl: boolean = false;
 	readonly privateKey: string = "";
 	readonly restSetting: Omit<ServerOptions, "tsl" & "privateKey"> = {};
 	readonly certificate: string = "";
 	readonly maxHeadersCount: number = 1000;
+	readonly fileUploadHandlers: string[] = [];
 	// sessions
 	readonly sessionCacheName: string = "default";
 	readonly sessionCookieName: string = "sessionId";
