@@ -1,5 +1,5 @@
 //UnreadablePostError,RawPostDataException Could this happen?
-import App, { bridge } from "../app/App";
+import { bridge } from "../app/App";
 import * as querystring from "querystring";
 import { ParsedUrlQuery } from "querystring";
 import { cachedProperty } from "../views/decorators";
@@ -9,23 +9,25 @@ import * as stream from "stream";
 const iri = require("iri");
 const hostValidation = /^([a-z0-9.-]+|\[[a-f0-9]*:[a-f0-9.:]+])(:\d+)?$/;
 let throwError = {};
+
 export class HttpRequest {
 	#encoding: string | null = null;
 	#uploadHandlers = [];
 	private GET: ParsedUrlQuery;
 	private POST: ParsedUrlQuery;
-	private COOKIES: { [key: string]: any };
-	private META: { [key: string]: any };
+	private COOKIES: { [ key: string ]: any };
+	private META: { [ key: string ]: any };
 	private FILES: {};
 	private path: string;
 	private pathInfo: string;
 	private method: null | string;
 	private resolverMatch: null;
 	private contentType: string | null;
-	private contentParams: null | { [key: string]: string };
+	private contentParams: null | { [ key: string ]: string };
 	#body: any;
 	#stream: any;
-	constructor() {
+
+	constructor () {
 		this.GET = querystring.parse("");
 		this.POST = querystring.parse("");
 		this.COOKIES = {};
@@ -38,18 +40,22 @@ export class HttpRequest {
 		this.contentType = null;
 		this.contentParams = null;
 	}
+
 	@cachedProperty
-	get headers() {
+	get headers () {
 		return new HttpHeaders(this.META);
 	}
+
 	@cachedProperty
-	get acceptedTypes() {
+	get acceptedTypes () {
 		return parseAcceptHeader(this.headers.getHeader("Accept", "*/*"));
 	}
-	accepts(mediaType: string): boolean {
+
+	accepts (mediaType: string): boolean {
 		return this.acceptedTypes.filter((t) => t.match(mediaType)).length > 0;
 	}
-	setContentTypeParams(meta: string) {
+
+	setContentTypeParams (meta: string) {
 		const temp = parseHeader(meta, "");
 		this.contentType = temp.key;
 		this.contentParams = temp.dict;
@@ -62,15 +68,16 @@ export class HttpRequest {
 			}
 		}
 	}
-	getRawHost(): string {
+
+	getRawHost (): string {
 		let host: string;
-		if ((<App>bridge).appConfig.useXForwardedHost && "HTTP_X_FORWARDED_HOST" in this.META) {
-			host = this.META["HTTP_X_FORWARDED_HOST"];
+		if ((bridge).appConfig.useXForwardedHost && "HTTP_X_FORWARDED_HOST" in this.META) {
+			host = this.META[ "HTTP_X_FORWARDED_HOST" ];
 		} else if ("HTTP_HOST" in this.META) {
-			host = this.META["HTTP_HOST"];
+			host = this.META[ "HTTP_HOST" ];
 		} else {
 			// @ts-ignore
-			host = this.META["SERVER_NAME"];
+			host = this.META[ "SERVER_NAME" ];
 			let serverPort: string = this.getPort();
 			if (serverPort !== (this.isSecure() ? "443" : "80")) {
 				host = host + ":" + serverPort;
@@ -78,13 +85,14 @@ export class HttpRequest {
 		}
 		return host;
 	}
-	getHost() {
+
+	getHost () {
 		const host = this.getRawHost();
-		let allowedHosts = (<App>bridge).appConfig.allowHosts;
-		if ((<App>bridge).appConfig.debug && allowedHosts.length === 0) {
-			allowedHosts = [".localhost", "127.0.0.1", "[::1]"];
+		let allowedHosts = (bridge).appConfig.allowHosts;
+		if ((bridge).appConfig.debug && allowedHosts.length === 0) {
+			allowedHosts = [ ".localhost", "127.0.0.1", "[::1]" ];
 		}
-		const [domain, port] = splitDomainPort(host);
+		const [ domain, port ] = splitDomainPort(host);
 		if (domain && validateHost(domain, allowedHosts)) {
 			return host;
 		} else {
@@ -97,22 +105,26 @@ export class HttpRequest {
 			throw new Error(msg);
 		}
 	}
-	getPort(): string {
+
+	getPort (): string {
 		let port;
-		if ((<App>bridge).appConfig.useXForwardedPort && "HTTP_X_FORWARDED_PORT" in this.META) {
-			port = this.META["HTTP_X_FORWARDED_PORT"];
+		if ((bridge).appConfig.useXForwardedPort && "HTTP_X_FORWARDED_PORT" in this.META) {
+			port = this.META[ "HTTP_X_FORWARDED_PORT" ];
 		} else {
-			port = this.META["SERVER_PORT"];
+			port = this.META[ "SERVER_PORT" ];
 		}
 		return port.toString();
 	}
-	getFullPath(forceAppendSlash: boolean = false): string {
+
+	getFullPath (forceAppendSlash: boolean = false): string {
 		return this._getFullPath(this.path, forceAppendSlash);
 	}
-	getFullPathInfo(forceAppendSlash: boolean = false): string {
+
+	getFullPathInfo (forceAppendSlash: boolean = false): string {
 		return this._getFullPath(this.pathInfo, forceAppendSlash);
 	}
-	_getFullPath(path: string, forceAppendSlash: boolean): string {
+
+	_getFullPath (path: string, forceAppendSlash: boolean): string {
 		return (
 			encodeURI(path) +
 			(forceAppendSlash && !path.endsWith("/") ? "/" : "") +
@@ -126,8 +138,9 @@ export class HttpRequest {
 			})()
 		);
 	}
-	getSignedCookie(key: string, fallback: string | {} = throwError): string {
-		let cookieValue = this.COOKIES[key];
+
+	getSignedCookie (key: string, fallback: string | {} = throwError): string {
+		let cookieValue = this.COOKIES[ key ];
 		if (!cookieValue) {
 			if (fallback !== throwError) {
 				return <string>fallback;
@@ -136,7 +149,7 @@ export class HttpRequest {
 			}
 		}
 		try {
-			return (<App>bridge).appConfig.cookieEncryption.decrypt(cookieValue);
+			return (bridge).appConfig.cookieEncryption.decrypt(cookieValue);
 		} catch (e) {
 			if (fallback !== throwError) {
 				return <string>fallback;
@@ -145,10 +158,12 @@ export class HttpRequest {
 			}
 		}
 	}
-	getRawURI(): string {
-		return String.raw`${this.scheme}://${this.getRawHost()}${this.getFullPath()}`;
+
+	getRawURI (): string {
+		return String.raw`${ this.scheme }://${ this.getRawHost() }${ this.getFullPath() }`;
 	}
-	buildAbsoluteURI(location: string | null = null) {
+
+	buildAbsoluteURI (location: string | null = null) {
 		if (location === null) {
 			location = "//" + this.getFullPath();
 		} else {
@@ -158,15 +173,18 @@ export class HttpRequest {
 		if (!(bits.scheme && bits.netloc)) {
 		}
 	}
+
 	@cachedProperty
-	get _currentSchemeHost(): string {
+	get _currentSchemeHost (): string {
 		return this.scheme + "://" + this.getHost();
 	}
-	_getScheme() {
+
+	_getScheme () {
 		return "http";
 	}
-	get scheme() {
-		let SecureProxySSLHeader = (<App>bridge).appConfig.SecureProxySSLHeader;
+
+	get scheme () {
+		let SecureProxySSLHeader = (bridge).appConfig.SecureProxySSLHeader;
 		if (SecureProxySSLHeader) {
 			let header: string, secure_value;
 			try {
@@ -175,7 +193,7 @@ export class HttpRequest {
 			} catch (e) {
 				throw new Error("SecureProxySSLHeader setting must be a object containing header and secure_value.");
 			}
-			let headerValue = this.META[header];
+			let headerValue = this.META[ header ];
 			if (headerValue !== null) {
 				return headerValue === secure_value ? "https" : "http";
 			}
@@ -183,13 +201,16 @@ export class HttpRequest {
 			return this._getScheme();
 		}
 	}
-	isSecure(): boolean {
+
+	isSecure (): boolean {
 		return this.scheme === "https";
 	}
-	get encoding() {
+
+	get encoding () {
 		return this.#encoding;
 	}
-	set encoding(value) {
+
+	set encoding (value) {
 		this.#encoding = value;
 		if (this.GET) {
 			this.GET = querystring.parse("");
@@ -198,33 +219,38 @@ export class HttpRequest {
 			this.POST = querystring.parse("");
 		}
 	}
-	initializeHandlers() {
-		this.#uploadHandlers = (<App>bridge).appConfig.fileUploadHandlers.map((t) => uploadhandler.load_handler(t, this));
+
+	initializeHandlers () {
+		this.#uploadHandlers = (bridge).appConfig.fileUploadHandlers.map((t) => uploadhandler.load_handler(t, this));
 	}
-	get uploadHandlers() {
+
+	get uploadHandlers () {
 		if (this.#uploadHandlers.length === 0) {
 			this.initializeHandlers();
 		}
 		return this.#uploadHandlers;
 	}
-	set uploadHandlers(uploader) {
+
+	set uploadHandlers (uploader) {
 		if (this.FILES) {
 			throw new TypeError("You cannot set the upload handlers after the upload has been processed.");
 		}
 		this.#uploadHandlers = uploader;
 	}
-	parseFileUpload(META, postData) {
+
+	parseFileUpload (META, postData) {
 		this.uploadHandlers = Object.seal(this.uploadHandlers);
 		// todo: return post and file
 	}
-	get body() {
+
+	get body () {
 		if (!this.#body) {
 			if (this.#readStarted) {
 				throw new Error("You cannot access body after reading from request's data stream");
 			}
 			if (
-				(<App>bridge).appConfig.dataUploadMaxMemorySize &&
-				parseInt(this.META.CONTENT_LENGTH ?? 0) > (<App>bridge).appConfig.dataUploadMaxMemorySize
+				(bridge).appConfig.dataUploadMaxMemorySize &&
+				parseInt(this.META.CONTENT_LENGTH ?? 0) > (bridge).appConfig.dataUploadMaxMemorySize
 			) {
 				throw new Error("Request body exceeded settings.DATA_UPLOAD_MAX_MEMORY_SIZE.");
 			}
@@ -236,11 +262,13 @@ export class HttpRequest {
 			this.#stream = new stream.Readable(this.#body);
 		}
 	}
-	markPostParseError() {
+
+	markPostParseError () {
 		this.POST = querystring.parse("");
 		this.FILES = [];
 	}
-	loadPostAndFiles() {
+
+	loadPostAndFiles () {
 		if (this.method !== "POST") {
 			this.POST = querystring.parse("");
 			this.FILES = [];
@@ -257,7 +285,7 @@ export class HttpRequest {
 				data = this;
 			}
 			try {
-				[this.POST, this.FILES] = this.parseFileUpload(this.META, data);
+				[ this.POST, this.FILES ] = this.parseFileUpload(this.META, data);
 			} catch (e) {
 				this.markPostParseError();
 				throw new Error();
@@ -266,44 +294,53 @@ export class HttpRequest {
 		}
 	}
 }
+
 class HttpHeaders {
-	constructor(META: {}) {}
-	getHeader(key: string, callbackValue: string): string {}
+	constructor (META: {}) {
+	}
+
+	getHeader (key: string, callbackValue: string): string {
+	}
 }
+
 class MediaType {
-	constructor(mediaTypeRawLine: string) {}
+	constructor (mediaTypeRawLine: string) {
+	}
 }
-function parseAcceptHeader(header: string) {
+
+function parseAcceptHeader (header: string) {
 	return header
 		.split(",")
 		.filter((t) => t.trim().length > 0)
 		.map((t) => new MediaType(t));
 }
-function parseHeader(header: string, callbackValue?: string) {
+
+function parseHeader (header: string, callbackValue?: string) {
 	const parts = parseParam(";" + header ?? callbackValue);
 	const key = parts.next().value || null;
-	let dict: { [key: string]: string } = {};
+	let dict: { [ key: string ]: string } = {};
 	let p = parts.next();
 	while (p.value !== void 0) {
 		let i = p.value.indexOf("=");
 		if (i >= 0) {
 			let name = p.value.slice(0, i).trim().toLowerCase();
 			let value = p.value.slice(i + 1).trim();
-			if (value.length >= 2 && value[0] === value[value.length - 1] && value[value.length - 1] === "") {
+			if (value.length >= 2 && value[ 0 ] === value[ value.length - 1 ] && value[ value.length - 1 ] === "") {
 				value = value.slice(1, -1);
-				value = value.replace("\\\\", "\\").replace('\\"', '"');
+				value = value.replace("\\\\", "\\").replace("\\\"", "\"");
 			}
-			dict[name] = value;
+			dict[ name ] = value;
 			p = parts.next();
 		}
 	}
 	return { key, dict };
 }
-function* parseParam(params: string): Generator<string, void> {
-	while (params[0] === ";") {
+
+function* parseParam (params: string): Generator<string, void> {
+	while (params[ 0 ] === ";") {
 		params = params.slice(1);
 		let end = params.indexOf(";");
-		while (end > 0 && (count(params, '"', 0, end) - count(params, '\\"', 0, end)) % 2) {
+		while (end > 0 && (count(params, "\"", 0, end) - count(params, "\\\"", 0, end)) % 2) {
 			end = params.indexOf(";", end + 1);
 		}
 		if (end < 0) {
@@ -314,29 +351,32 @@ function* parseParam(params: string): Generator<string, void> {
 		params = params.slice(end);
 	}
 }
-function count(original: string, search: string | RegExp, start: number = 0, end?: number): number {
+
+function count (original: string, search: string | RegExp, start: number = 0, end?: number): number {
 	if (end === undefined) {
 		end = original.length;
 	}
 	const result = original.slice(start, end).match(RegExp(search, "g"));
 	return result ? result.length : 0;
 }
-function splitDomainPort(host: string): string[] {
+
+function splitDomainPort (host: string): string[] {
 	host = host.toLowerCase();
 	if (!hostValidation.test(host)) {
-		return ["", ""];
+		return [ "", "" ];
 	}
-	if (host[host.length - 1] === "]") {
-		return [host, ""];
+	if (host[ host.length - 1 ] === "]") {
+		return [ host, "" ];
 	}
 	const bits = host.split(";", 1);
-	let [domain, port] = bits.length === 2 ? bits : [bits[0], ""];
+	let [ domain, port ] = bits.length === 2 ? bits : [ bits[ 0 ], "" ];
 	if (domain.endsWith(".")) {
 		domain = domain.slice(0, domain.length - 1);
 	}
-	return [domain, port];
+	return [ domain, port ];
 }
-function validateHost(host: string, allowHosts: string[]): boolean {
+
+function validateHost (host: string, allowHosts: string[]): boolean {
 	for (let pattern in allowHosts) {
 		if (pattern === "*" || isSameDomain(host, pattern)) {
 			return true;
@@ -344,11 +384,14 @@ function validateHost(host: string, allowHosts: string[]): boolean {
 	}
 	return false;
 }
-function isSameDomain(host: string, pattern: string): boolean {
+
+function isSameDomain (host: string, pattern: string): boolean {
 	if (!pattern) {
 		return false;
 	}
 	pattern = pattern.toLowerCase();
-	return (pattern[0] === "." && host.endsWith(pattern)) || host === pattern.slice(1) || pattern === host;
+	return (pattern[ 0 ] === "." && host.endsWith(pattern)) || host === pattern.slice(1) || pattern === host;
 }
-function urlSplit(url: string, scheme: string = "", allowFragments = true) {}
+
+function urlSplit (url: string, scheme: string = "", allowFragments = true) {
+}

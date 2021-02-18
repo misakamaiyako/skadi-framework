@@ -8,10 +8,10 @@ class App {
 	private readonly server: any;
 	constructor() {
 		this.appConfig = initSetting();
-		const port = this.appConfig.port ?? (this.appConfig.tsl ? 443 : 80);
+		const port = this.appConfig.port ?? (this.appConfig.ssl ? 443 : 80);
 		this.app = express();
 		let server;
-		if (this.appConfig.tsl) {
+		if (this.appConfig.ssl) {
 			try {
 				const key = fs.readFileSync(this.appConfig.privateKey);
 				const cert = fs.readFileSync(this.appConfig.certificate);
@@ -26,6 +26,7 @@ class App {
 			}
 		} else {
 			const http = require("http");
+			const a = http.STATUS_CODES[404]
 			server = http.createServer(
 				{ maxHeaderSize: this.appConfig.maxHeadersCount, ...this.appConfig.restSetting },
 				this.app
@@ -42,4 +43,5 @@ class App {
 	ready(server: any) {}
 }
 export default App;
-export let bridge: App | {} = {};
+//@ts-ignore
+export let bridge: App = {};

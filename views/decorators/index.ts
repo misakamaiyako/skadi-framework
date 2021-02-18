@@ -1,7 +1,7 @@
 export function cachedProperty(target: any, name: string, descriptor: PropertyDescriptor) {
 	const old = descriptor.value;
 	let called: boolean = false;
-	let result: any;
+	let result: typeof old;
 	descriptor.value = function () {
 		if (called) {
 			return result;

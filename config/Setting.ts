@@ -15,7 +15,16 @@ export default class Setting {
 	readonly allowHosts: string[] = [];
 	readonly timeZone: string = "UTC";
 	readonly databaseTimeZone: string = "UTC";
-	readonly charset: string = "utf-8";
+	readonly charset: | "utf-8"
+		| "ascii"
+		| "utf8"
+		| "utf16le"
+		| "ucs2"
+		| "ucs-2"
+		| "base64"
+		| "latin1"
+		| "binary"
+		| "hex" = "utf-8";
 	readonly serverEmail: string = "root@localhost";
 	readonly database: databaseSetting = {};
 	readonly databaseRouters: databaseSetting[] = [];
@@ -94,9 +103,9 @@ export default class Setting {
 	readonly useXForwardedHost: boolean = false;
 	readonly useXForwardedPort: boolean = false;
 	readonly SecureProxySSLHeader: { [key: string]: any } | null = null;
-	readonly tsl: boolean = false;
+	readonly ssl: boolean = false;
 	readonly privateKey: string = "";
-	readonly restSetting: Omit<ServerOptions, "tsl" & "privateKey"> = {};
+	readonly restSetting: Omit<ServerOptions, "ssl" & "privateKey"> = {};
 	readonly certificate: string = "";
 	readonly maxHeadersCount: number = 1000;
 	readonly fileUploadHandlers: string[] = [];
