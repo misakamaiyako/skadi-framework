@@ -1,9 +1,5 @@
 ## Response
 
-## 服务器响应类
-
-[TOP]
-
 1. ResponseBase
 
 	 > 响应基类，所有的response都派生自此类
