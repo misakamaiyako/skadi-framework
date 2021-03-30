@@ -1,47 +1,49 @@
-import fs from "fs";
-import express, { Express } from "express";
 import Setting from "../config/Setting";
-import initSetting from "./config";
+import http, { IncomingMessage, ServerResponse } from "http";
+import https from "https";
+import bodyParser from "body-parser";
+import { Skadi } from "../types";
+import { Content } from "../Controller/BaseController/Content";
+import proxyaddr from "proxy-addr";
+import BaseController from "../Controller/BaseController";
+
 class App {
 	readonly appConfig: Setting;
-	private readonly app: Express;
-	private readonly server: any;
-	constructor() {
-		this.appConfig = initSetting();
-		const port = this.appConfig.port ?? (this.appConfig.ssl ? 443 : 80);
-		this.app = express();
-		let server;
-		if (this.appConfig.ssl) {
-			try {
-				const key = fs.readFileSync(this.appConfig.privateKey);
-				const cert = fs.readFileSync(this.appConfig.certificate);
-				const https = require("https");
-				server = https.createServer(
-					{ key, cert, maxHeaderSize: this.appConfig.maxHeadersCount, ...this.appConfig.restSetting },
-					this.app
-				);
-			} catch (e) {
-				console.log(e);
-				throw new ReferenceError("your tsl's file is incorrect, please check and restart again");
-			}
-		} else {
-			const http = require("http");
-			const a = http.STATUS_CODES[404]
-			server = http.createServer(
-				{ maxHeaderSize: this.appConfig.maxHeadersCount, ...this.appConfig.restSetting },
-				this.app
-			);
+	constructor(setting?: typeof Setting) {
+		const appConfig = new Setting(); //(setting ?? Setting)();
+		if (setting === undefined) {
+			console.log("you have not gave setting class, server will use default setting");
+			console.log("you can set your setting class by extend Setting Class");
 		}
-		this.server = server;
-		server.listen(port, () => {
-			console.log("server started on port " + port);
-			this.ready(this.server);
-		});
-		bridge = this;
+		this.appConfig = appConfig;
+		const port = 80; // appConfig.port ?? (this.appConfig.ssl ? 443 : 80);
+		const hostname = appConfig.public ? "0.0.0.0" : "127.0.0.1";
+		let serverType;
+		if (!appConfig.ssl) {
+			const server = http.createServer((req, res) => {
+				this.preController(req, res);
+			});
+			server.listen(port, hostname);
+		} else {
+			serverType = require("https");
+		}
+		console.log("server started successes and listen on %s://%s:%i", appConfig.ssl ? "https" : "http", hostname, port);
 	}
 
-	ready(server: any) {}
+	//预处理，使用baseController
+	preController(req: IncomingMessage, res: ServerResponse) {
+		// const baseController = new BaseController(req);
+		console.log(proxyaddr(req, "1.1.1.1"));
+		console.log(req.headers);
+		// req;
+		// const content = new Content(this, req, res);
+		res.end();
+	}
+	//插件，在请求进入控制器和视图前调用，需要提供install函数和handle函数,另外可以提供type参数表示是在分发前处理还是在返回给客户端前处理
+	#prePlugins: Skadi.SkadiPlugin[] = [];
+	use(plugins: Skadi.SkadiPlugin) {
+		plugins.install();
+		this.#prePlugins.push(plugins);
+	}
 }
 export default App;
-//@ts-ignore
-export let bridge: App = {};

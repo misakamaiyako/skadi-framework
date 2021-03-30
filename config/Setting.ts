@@ -7,24 +7,27 @@ class databaseSetting {}
 
 export default class Setting {
 	// core
-	readonly debug: boolean = true;
-	readonly port: number | null = null;
+	// readonly debug: boolean = true;
+	//端口号
+	readonly port?: number;
+	//是否公开，否表示只能本机访问
+	readonly public?: boolean = false;
+	//基础URL路径，默认值"/",当服务不是部署在根上时需要修改
+	readonly baseURL: string = "/";
+	//解析queries的方式
+	readonly queriesType: string | Array<string> = "application/json";
+	//是否信任代理，可以为boolean,Array<'loopback'|"linklocal"|"uniquelocal ">或者(ip:string)=>boolean
+	readonly trustProxy: boolean | Array<"loopback" | "linklocal" | "uniquelocal "> | ((ip: string) => boolean) = [
+		"loopback",
+	];
 	readonly stopPropagation: boolean = true;
 	readonly admins: string[] = [];
 	readonly internalIPs: string[] = [];
 	readonly allowHosts: string[] = [];
 	readonly timeZone: string = "UTC";
 	readonly databaseTimeZone: string = "UTC";
-	readonly charset: | "utf-8"
-		| "ascii"
-		| "utf8"
-		| "utf16le"
-		| "ucs2"
-		| "ucs-2"
-		| "base64"
-		| "latin1"
-		| "binary"
-		| "hex" = "utf-8";
+	readonly charset: "utf-8" | "ascii" | "utf8" | "utf16le" | "ucs2" | "ucs-2" | "base64" | "latin1" | "binary" | "hex" =
+		"utf-8";
 	readonly serverEmail: string = "root@localhost";
 	readonly database: databaseSetting = {};
 	readonly databaseRouters: databaseSetting[] = [];
@@ -103,6 +106,7 @@ export default class Setting {
 	readonly useXForwardedHost: boolean = false;
 	readonly useXForwardedPort: boolean = false;
 	readonly SecureProxySSLHeader: { [key: string]: any } | null = null;
+	// 是否使用https
 	readonly ssl: boolean = false;
 	readonly privateKey: string = "";
 	readonly restSetting: Omit<ServerOptions, "ssl" & "privateKey"> = {};
